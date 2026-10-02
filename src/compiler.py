@@ -5,7 +5,7 @@ import sys
 
 def بناء_الرموز(الكود):
     القواعد = [
-        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|ليكن|إذا|وإلا|كرر|مرات|صورة|فيديو|إدخال)\b'),
+        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|ليكن|إذا|وإلا|كرر|مرات|صورة|فيديو|إدخال|نص|انتقل|إلى)\b'),
         ('نص_مقتبس', r'"[^"]*"'),
         ('رقم', r'\d+(\.\d+)?'),
         ('قوس_فتح', r'\{'),
@@ -59,27 +59,27 @@ class محلل_نحوي:
     def تحليل_شكل(self):
         self.استهلك('شكل', "توقع 'شكل'")
         self.استهلك('قوس_فتح', "توقع '{'")
-        عقدة = {'النوع': 'شكل', 'المحتوى': []}
+        عقدة = {'النوع': 'شكل', 'الصفحات': []}
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_إغلاق':
-            عقدة['المحتوى'].append(self.تحليل_صفحة())
+            عقدة['الصفحات'].append(self.تحليل_صفحة())
         self.استهلك('قوس_إغلاق', "توقع '}'")
         return عقدة
 
     def تحليل_صفحة(self):
         self.استهلك('صفحة', "توقع 'صفحة'")
-        self.استهلك('نص_مقتبس', "توقع اسم الصفحة")
+        اسم_الصفحة = self.استهلك('نص_مقتبس', "توقع اسم الصفحة")['القيمة'].strip('"')
         self.استهلك('قوس_فتح', "توقع '{'")
-        عقدة = {'النوع': 'صفحة', 'المحتوى': []}
+        عقدة = {'النوع': 'صفحة', 'الاسم': اسم_الصفحة, 'المحتوى': []}
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_إغلاق':
             رمز = self.الرموز[self.الموضع]
             if رمز['القيمة'] == 'عنوان':
                 عقدة['المحتوى'].append(self.تحليل_عنصر('عنوان'))
             elif رمز['القيمة'] == 'زر':
                 عقدة['المحتوى'].append(self.تحليل_عنصر('زر'))
-            elif رمز['القيمة'] == 'إدخال':
-                عقدة['المحتوى'].append(self.تحليل_إدخال())
+            elif رمز['القيمة'] == 'نص':
+                عقدة['المحتوى'].append(self.تحليل_عنصر('نص'))
             else:
-                self.الموضع += 1 # تجاهل أي شيء غير معروف مؤقتاً لتجنب الأخطاء
+                self.الموضع += 1
         self.استهلك('قوس_إغلاق', "توقع '}'")
         return عقدة
 
@@ -87,12 +87,6 @@ class محلل_نحوي:
         self.استهلك(نوع_العنصر, f"توقع '{نوع_العنصر}'")
         رمز = self.استهلك('نص_مقتبس', "توقع نص")
         return {'النوع': نوع_العنصر, 'النص': رمز['القيمة'].strip('"')}
-
-    def تحليل_إدخال(self):
-        self.استهلك('إدخال', "توقع 'إدخال'")
-        المعرف = self.استهلك('نص_مقتبس', "توقع معرف الحقل")['القيمة'].strip('"')
-        النص_البديل = self.استهلك('نص_مقتبس', "توقع النص التوضيحي")['القيمة'].strip('"')
-        return {'النوع': 'إدخال', 'المعرف': المعرف, 'النص_البديل': النص_البديل}
 
     def تحليل_طراز(self):
         self.استهلك('طراز', "توقع 'طراز'")
@@ -145,22 +139,39 @@ class محلل_نحوي:
         self.استهلك('قوس_فتح', "توقع '{'")
         الأوامر = []
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_إغلاق':
-            أمر = self.تحليل_بيان()
+            أمر = self.تحليل_أمر()
             if أمر:
                 الأوامر.append(أمر)
         self.استهلك('قوس_إغلاق', "توقع '}'")
         return {'النوع': 'حدث', 'الحدث': 'نقر', 'الهدف': اسم_الزر, 'الأوامر': الأوامر}
+
+    def تحليل_أمر(self):
+        رمز = self.الرموز[self.الموضع]
+        if رمز['القيمة'] == 'أظهر':
+            return self.تحليل_طباعة()
+        elif رمز['القيمة'] == 'انتقل':
+            return self.تحليل_انتقال()
+        else:
+            self.الموضع += 1
+            return None
 
     def تحليل_طباعة(self):
         self.استهلك('أظهر', "توقع 'أظهر'")
         النص = self.استهلك('نص_مقتبس', "توقع نص")['القيمة'].strip('"')
         return {'النوع': 'طباعة', 'النص': النص}
 
+    def تحليل_انتقال(self):
+        self.استهلك('انتقل', "توقع 'انتقل'")
+        self.استهلك('إلى', "توقع 'إلى'")
+        اسم_الصفحة = self.استهلك('نص_مقتبس', "توقع اسم الصفحة")['القيمة'].strip('"')
+        return {'النوع': 'انتقال', 'الصفحة': اسم_الصفحة}
+
 def توليد_أمر(أمر):
     if أمر['النوع'] == 'طباعة':
-        # هنا السحر: نبحث عن أي كلمة بين {} ونستبدلها بكود يقرأ قيمة حقل الإدخال
         نص_جافاسكريبت = re.sub(r'\{([أ-يa-zA-Z_][أ-يa-zA-Z0-9_]*)\}', r'${document.getElementById("\1").value || "صديق"}', أمر['النص'])
         return f'            alert(`{نص_جافاسكريبت}`);'
+    elif أمر['النوع'] == 'انتقال':
+        return f'            showPage("{أمر["الصفحة"]}");'
     return ''
 
 def توليد_الكود(شجرة):
@@ -174,15 +185,16 @@ def توليد_الكود(شجرة):
     html.append('    <style>')
     html.append('        body { font-family: "Cairo", "Tajawal", sans-serif; background: #0B0C10; color: #C5C6C7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }')
     html.append('        .container { text-align: center; padding: 40px; }')
-    html.append('        input { padding: 12px; border-radius: 8px; border: 2px solid #D4AF37; background: #1A1C23; color: white; font-family: inherit; font-size: 1em; margin: 15px 0; width: 250px; text-align: center; }')
-    html.append('        input:focus { outline: none; border-color: #FFB347; }')
+    html.append('        .page { display: none; }')
+    html.append('        .page.active { display: block; }')
+    html.append('        button { margin: 10px; }')
     
     خريطة_الخصائص = {"اللون": "color", "الخلفية": "background-color", "الحجم": "font-size", "المحاذاة": "text-align", "الحواف": "border-radius"}
     
     if شجرة.get('طراز'):
         for قاعدة in شجرة['طراز'].get('القواعد', []):
             الهدف = قاعدة['الهدف']
-            محدد = 'h1' if الهدف == 'عنوان' else 'button'
+            محدد = 'h1' if الهدف == 'عنوان' else ('button' if الهدف == 'زر' else 'p')
             html.append(f'        {محدد} {{')
             for اسم_عربي, قيمة in قاعدة['الخصائص'].items():
                 اسم_انجليزي = خريطة_الخصائص.get(اسم_عربي, اسم_عربي)
@@ -193,19 +205,25 @@ def توليد_الكود(شجرة):
     html.append('    </style></head><body>')
     
     if شجرة.get('شكل'):
-        for صفحة in شجرة['شكل'].get('المحتوى', []):
-            html.append('    <div class="container">')
+        for i, صفحة in enumerate(شجرة['شكل'].get('الصفحات', [])):
+            كلاس = 'active' if i == 0 else ''
+            html.append(f'    <div class="container page {كلاس}" id="page-{صفحة["الاسم"]}">')
             for عنصر in صفحة.get('المحتوى', []):
                 if عنصر['النوع'] == 'عنوان':
                     html.append(f'        <h1>{عنصر["النص"]}</h1>')
                 elif عنصر['النوع'] == 'زر':
                     html.append(f'        <button id="btn-{عنصر["النص"]}">{عنصر["النص"]}</button>')
-                elif عنصر['النوع'] == 'إدخال':
-                    html.append(f'        <input type="text" id="{عنصر["المعرف"]}" placeholder="{عنصر["النص_البديل"]}">')
+                elif عنصر['النوع'] == 'نص':
+                    html.append(f'        <p>{عنصر["النص"]}</p>')
             html.append('    </div>')
     
     if شجرة.get('معنى'):
         html.append('    <script>')
+        html.append('        function showPage(pageName) {')
+        html.append('            document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));')
+        html.append('            document.getElementById("page-" + pageName).classList.add("active");')
+        html.append('        }')
+        
         for بيان in شجرة['معنى'].get('البيانات', []):
             if بيان and بيان['النوع'] == 'حدث' and بيان['الحدث'] == 'نقر':
                 html.append(f'        document.getElementById("btn-{بيان["الهدف"]}").addEventListener("click", function() {{')
@@ -220,7 +238,7 @@ def توليد_الكود(شجرة):
 
 def رئيسي():
     محلل_الأوامر = argparse.ArgumentParser(description="مترجم لغة رَمْز", formatter_class=argparse.RawTextHelpFormatter)
-    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 1.4.0 (دعم حقول الإدخال)')
+    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 1.5.0 (دعم التنقل بين الصفحات)')
     الأوامر_الفرعية = محلل_الأوامر.add_subparsers(dest='الأمر')
     أمر_البناء = الأوامر_الفرعية.add_parser('build')
     أمر_البناء.add_argument('ملف_الإدخال', nargs='?', default='examples/test.ramz')
