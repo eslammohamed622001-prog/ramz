@@ -5,14 +5,11 @@ import sys
 
 def بناء_الرموز(الكود):
     القواعد = [
-        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|ليكن|إذا|وإلا|كرر|مرات|صورة|فيديو|إدخال|نص|انتقل|إلى|قائمة|عنصر)\b'),
+        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|نموذج|حقل_نص|حقل_بريد|حقل_نص_طويل)\b'),
         ('نص_مقتبس', r'"[^"]*"'),
-        ('رقم', r'\d+(\.\d+)?'),
         ('قوس_فتح', r'\{'),
         ('قوس_إغلاق', r'\}'),
         ('عامل', r'='),
-        ('عامل_مقارنة', r'==|!=|>=|<=|>|<'),
-        ('عامل_حسابي', r'[\+\-\*\/]'),
         ('تعليق', r'//.*'),
         ('معرّف', r'[أ-يa-zA-Z_][أ-يa-zA-Z0-9_]*'),
         ('مسافة', r'\s+'),
@@ -76,10 +73,8 @@ class محلل_نحوي:
                 عقدة['المحتوى'].append(self.تحليل_عنصر('عنوان'))
             elif رمز['القيمة'] == 'زر':
                 عقدة['المحتوى'].append(self.تحليل_عنصر('زر'))
-            elif رمز['القيمة'] == 'نص':
-                عقدة['المحتوى'].append(self.تحليل_عنصر('نص'))
-            elif رمز['القيمة'] == 'قائمة':
-                عقدة['المحتوى'].append(self.تحليل_قائمة())
+            elif رمز['القيمة'] == 'نموذج':
+                عقدة['المحتوى'].append(self.تحليل_نموذج())
             else:
                 self.الموضع += 1
         self.استهلك('قوس_إغلاق', "توقع '}'")
@@ -90,20 +85,34 @@ class محلل_نحوي:
         رمز = self.استهلك('نص_مقتبس', "توقع نص")
         return {'النوع': نوع_العنصر, 'النص': رمز['القيمة'].strip('"')}
 
-    def تحليل_قائمة(self):
-        self.استهلك('قائمة', "توقع 'قائمة'")
-        اسم_القائمة = self.استهلك('نص_مقتبس', "توقع اسم القائمة")['القيمة'].strip('"')
+    def تحليل_نموذج(self):
+        self.استهلك('نموذج', "توقع 'نموذج'")
+        اسم_النموذج = self.استهلك('نص_مقتبس', "توقع اسم النموذج")['القيمة'].strip('"')
         self.استهلك('قوس_فتح', "توقع '{'")
-        عناصر = []
+        حقول = []
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_إغلاق':
-            if self.الرموز[self.الموضع]['القيمة'] == 'عنصر':
-                self.استهلك('عنصر', "توقع 'عنصر'")
-                نص_العنصر = self.استهلك('نص_مقتبس', "توقع نص العنصر")['القيمة'].strip('"')
-                عناصر.append({'النوع': 'عنصر', 'النص': نص_العنصر})
+            رمز = self.الرموز[self.الموضع]
+            if رمز['القيمة'] == 'حقل_نص':
+                self.استهلك('حقل_نص', "توقع 'حقل_نص'")
+                المعرف = self.استهلك('نص_مقتبس', "توقع المعرف")['القيمة'].strip('"')
+                النص_البديل = self.استهلك('نص_مقتبس', "توقع النص البديل")['القيمة'].strip('"')
+                حقول.append({'النوع': 'حقل_نص', 'المعرف': المعرف, 'النص_البديل': النص_البديل})
+            elif رمز['القيمة'] == 'حقل_بريد':
+                self.استهلك('حقل_بريد', "توقع 'حقل_بريد'")
+                المعرف = self.استهلك('نص_مقتبس', "توقع المعرف")['القيمة'].strip('"')
+                النص_البديل = self.استهلك('نص_مقتبس', "توقع النص البديل")['القيمة'].strip('"')
+                حقول.append({'النوع': 'حقل_بريد', 'المعرف': المعرف, 'النص_البديل': النص_البديل})
+            elif رمز['القيمة'] == 'حقل_نص_طويل':
+                self.استهلك('حقل_نص_طويل', "توقع 'حقل_نص_طويل'")
+                المعرف = self.استهلك('نص_مقتبس', "توقع المعرف")['القيمة'].strip('"')
+                النص_البديل = self.استهلك('نص_مقتبس', "توقع النص البديل")['القيمة'].strip('"')
+                حقول.append({'النوع': 'حقل_نص_طويل', 'المعرف': المعرف, 'النص_البديل': النص_البديل})
+            elif رمز['القيمة'] == 'زر':
+                حقول.append(self.تحليل_عنصر('زر'))
             else:
                 self.الموضع += 1
         self.استهلك('قوس_إغلاق', "توقع '}'")
-        return {'النوع': 'قائمة', 'الاسم': اسم_القائمة, 'العناصر': عناصر}
+        return {'النوع': 'نموذج', 'الاسم': اسم_النموذج, 'الحقول': حقول}
 
     def تحليل_طراز(self):
         self.استهلك('طراز', "توقع 'طراز'")
@@ -166,8 +175,6 @@ class محلل_نحوي:
         رمز = self.الرموز[self.الموضع]
         if رمز['القيمة'] == 'أظهر':
             return self.تحليل_طباعة()
-        elif رمز['القيمة'] == 'انتقل':
-            return self.تحليل_انتقال()
         else:
             self.الموضع += 1
             return None
@@ -177,18 +184,9 @@ class محلل_نحوي:
         النص = self.استهلك('نص_مقتبس', "توقع نص")['القيمة'].strip('"')
         return {'النوع': 'طباعة', 'النص': النص}
 
-    def تحليل_انتقال(self):
-        self.استهلك('انتقل', "توقع 'انتقل'")
-        self.استهلك('إلى', "توقع 'إلى'")
-        اسم_الصفحة = self.استهلك('نص_مقتبس', "توقع اسم الصفحة")['القيمة'].strip('"')
-        return {'النوع': 'انتقال', 'الصفحة': اسم_الصفحة}
-
 def توليد_أمر(أمر):
     if أمر['النوع'] == 'طباعة':
-        نص_جافاسكريبت = re.sub(r'\{([أ-يa-zA-Z_][أ-يa-zA-Z0-9_]*)\}', r'${document.getElementById("\1").value || "صديق"}', أمر['النص'])
-        return f'            alert(`{نص_جافاسكريبت}`);'
-    elif أمر['النوع'] == 'انتقال':
-        return f'            showPage("{أمر["الصفحة"]}");'
+        return f'            alert("{أمر["النص"]}");'
     return ''
 
 def توليد_الكود(شجرة):
@@ -201,26 +199,18 @@ def توليد_الكود(شجرة):
     html.append('    <title>رَمْز - مشروع تجريبي</title>')
     html.append('    <style>')
     html.append('        body { font-family: "Cairo", "Tajawal", sans-serif; background: #0B0C10; color: #C5C6C7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }')
-    html.append('        .container { text-align: center; padding: 40px; }')
-    html.append('        .page { display: none; }')
-    html.append('        .page.active { display: block; }')
-    html.append('        button { margin: 10px; }')
-    html.append('        ul { list-style: none; padding: 0; }')
-    html.append('        li { padding: 10px; margin: 5px 0; background: #1A1C23; border-radius: 8px; }')
+    html.append('        .container { text-align: center; padding: 40px; max-width: 600px; width: 100%; }')
+    html.append('        input, textarea { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 2px solid #D4AF37; background: #1A1C23; color: white; font-family: inherit; font-size: 1em; box-sizing: border-box; }')
+    html.append('        input:focus, textarea:focus { outline: none; border-color: #FFB347; }')
+    html.append('        textarea { min-height: 120px; resize: vertical; }')
+    html.append('        button { padding: 12px 30px; margin-top: 15px; cursor: pointer; font-family: inherit; font-size: 1em; }')
     
     خريطة_الخصائص = {"اللون": "color", "الخلفية": "background-color", "الحجم": "font-size", "المحاذاة": "text-align", "الحواف": "border-radius"}
     
     if شجرة.get('طراز'):
         for قاعدة in شجرة['طراز'].get('القواعد', []):
             الهدف = قاعدة['الهدف']
-            if الهدف == 'عنوان':
-                محدد = 'h1'
-            elif الهدف == 'زر':
-                محدد = 'button'
-            elif الهدف == 'قائمة':
-                محدد = 'li'
-            else:
-                محدد = 'p'
+            محدد = 'h1' if الهدف == 'عنوان' else 'button'
             html.append(f'        {محدد} {{')
             for اسم_عربي, قيمة in قاعدة['الخصائص'].items():
                 اسم_انجليزي = خريطة_الخصائص.get(اسم_عربي, اسم_عربي)
@@ -231,30 +221,27 @@ def توليد_الكود(شجرة):
     html.append('    </style></head><body>')
     
     if شجرة.get('شكل'):
-        for i, صفحة in enumerate(شجرة['شكل'].get('الصفحات', [])):
-            كلاس = 'active' if i == 0 else ''
-            html.append(f'    <div class="container page {كلاس}" id="page-{صفحة["الاسم"]}">')
+        for صفحة in شجرة['شكل'].get('الصفحات', []):
+            html.append('    <div class="container">')
             for عنصر in صفحة.get('المحتوى', []):
                 if عنصر['النوع'] == 'عنوان':
                     html.append(f'        <h1>{عنصر["النص"]}</h1>')
-                elif عنصر['النوع'] == 'زر':
-                    html.append(f'        <button id="btn-{عنصر["النص"]}">{عنصر["النص"]}</button>')
-                elif عنصر['النوع'] == 'نص':
-                    html.append(f'        <p>{عنصر["النص"]}</p>')
-                elif عنصر['النوع'] == 'قائمة':
-                    html.append(f'        <ul id="list-{عنصر["الاسم"]}">')
-                    for item in عنصر['العناصر']:
-                        html.append(f'            <li>{item["النص"]}</li>')
-                    html.append('        </ul>')
+                elif عنصر['النوع'] == 'نموذج':
+                    html.append(f'        <form id="{عنصر["الاسم"]}">')
+                    for حقل in عنصر['الحقول']:
+                        if حقل['النوع'] == 'حقل_نص':
+                            html.append(f'            <input type="text" id="{حقل["المعرف"]}" placeholder="{حقل["النص_البديل"]}">')
+                        elif حقل['النوع'] == 'حقل_بريد':
+                            html.append(f'            <input type="email" id="{حقل["المعرف"]}" placeholder="{حقل["النص_البديل"]}">')
+                        elif حقل['النوع'] == 'حقل_نص_طويل':
+                            html.append(f'            <textarea id="{حقل["المعرف"]}" placeholder="{حقل["النص_البديل"]}"></textarea>')
+                        elif حقل['النوع'] == 'زر':
+                            html.append(f'            <button type="button" id="btn-{حقل["النص"]}">{حقل["النص"]}</button>')
+                    html.append('        </form>')
             html.append('    </div>')
     
     if شجرة.get('معنى'):
         html.append('    <script>')
-        html.append('        function showPage(pageName) {')
-        html.append('            document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));')
-        html.append('            document.getElementById("page-" + pageName).classList.add("active");')
-        html.append('        }')
-        
         for بيان in شجرة['معنى'].get('البيانات', []):
             if بيان and بيان['النوع'] == 'حدث' and بيان['الحدث'] == 'نقر':
                 html.append(f'        document.getElementById("btn-{بيان["الهدف"]}").addEventListener("click", function() {{')
@@ -269,7 +256,7 @@ def توليد_الكود(شجرة):
 
 def رئيسي():
     محلل_الأوامر = argparse.ArgumentParser(description="مترجم لغة رَمْز", formatter_class=argparse.RawTextHelpFormatter)
-    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 1.6.0 (دعم القوائم)')
+    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 1.7.0 (دعم النماذج)')
     الأوامر_الفرعية = محلل_الأوامر.add_subparsers(dest='الأمر')
     أمر_البناء = الأوامر_الفرعية.add_parser('build')
     أمر_البناء.add_argument('ملف_الإدخال', nargs='?', default='examples/test.ramz')
@@ -290,7 +277,7 @@ def رئيسي():
                 ملف_المخرج.write(توليد_الكود(الشجرة))
             print("🎉 تم بناء المشروع بنجاح! افتح output/index.html في المتصفح.")
         except Exception as خطأ:
-            print(f"❌ خطأ: {خطأ}")
+            print(f" خطأ: {خطأ}")
 
 if __name__ == "__main__":
     رئيسي()
