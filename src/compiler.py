@@ -5,7 +5,8 @@ import sys
 
 def بناء_الرموز(الكود):
     القواعد = [
-        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|إدخال|دالة|ليكن)\b'),
+        ('كلمة_مفتاحية', r'\b(شكل|صفحة|عنوان|زر|معنى|عند|النقر|على|أظهر|طراز|تنسيق|خاصية|إدخال|دالة|ليكن|احفظ|من|امسح)\b'),
+        ('دالة_استرجاع', r'\bاسترجع\b'),
         ('نص_مقتبس', r'"[^"]*"'),
         ('رقم', r'\d+(\.\d+)?'),
         ('قوس_فتح', r'\{'),
@@ -138,25 +139,38 @@ class محلل_نحوي:
             return self.تحليل_دالة()
         elif رمز['القيمة'] == 'ليكن':
             return self.تحليل_متغير()
+        elif رمز['القيمة'] == 'احفظ':
+            return self.تحليل_حفظ()
+        elif رمز['القيمة'] == 'امسح':
+            return self.تحليل_مسح()
         else:
-            # قد يكون استدعاء دالة
             if self.الموضع + 1 < len(self.الرموز) and self.الرموز[self.الموضع + 1]['النوع'] == 'قوس_دائري_فتح':
                 return self.تحليل_استدعاء_دالة()
             self.الموضع += 1
             return None
 
+    def تحليل_حفظ(self):
+        self.استهلك('احفظ', "توقع 'احفظ'")
+        مفتاح = self.استهلك('نص_مقتبس', "توقع مفتاح التخزين")['القيمة'].strip('"')
+        self.استهلك('من', "توقع 'من'")
+        مصدر = self.استهلك('نص_مقتبس', "توقع مصدر البيانات")['القيمة'].strip('"')
+        return {'النوع': 'حفظ', 'مفتاح': مفتاح, 'مصدر': مصدر}
+
+    def تحليل_مسح(self):
+        self.استهلك('امسح', "توقع 'امسح'")
+        مفتاح = self.استهلك('نص_مقتبس', "توقع مفتاح التخزين")['القيمة'].strip('"')
+        return {'النوع': 'مسح', 'مفتاح': مفتاح}
+
     def تحليل_دالة(self):
         self.استهلك('دالة', "توقع 'دالة'")
         اسم_الدالة = self.استهلك('معرّف', "توقع اسم الدالة")['القيمة']
         self.استهلك('قوس_دائري_فتح', "توقع '('")
-        
         معلمات = []
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_دائري_إغلاق':
             if self.الرموز[self.الموضع]['النوع'] == 'معرّف':
                 معلمات.append(self.الرموز[self.الموضع]['القيمة'])
             self.الموضع += 1
         self.استهلك('قوس_دائري_إغلاق', "توقع ')'")
-        
         self.استهلك('قوس_فتح', "توقع '{'")
         أوامر = []
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_إغلاق':
@@ -164,20 +178,17 @@ class محلل_نحوي:
             if أمر:
                 أوامر.append(أمر)
         self.استهلك('قوس_إغلاق', "توقع '}'")
-        
         return {'النوع': 'دالة', 'الاسم': اسم_الدالة, 'المعلمات': معلمات, 'الأوامر': أوامر}
 
     def تحليل_استدعاء_دالة(self):
         اسم_الدالة = self.استهلك('معرّف', "توقع اسم الدالة")['القيمة']
         self.استهلك('قوس_دائري_فتح', "توقع '('")
-        
         وسائط = []
         while self.الموضع < len(self.الرموز) and self.الرموز[self.الموضع]['النوع'] != 'قوس_دائري_إغلاق':
             if self.الرموز[self.الموضع]['النوع'] == 'معرّف':
                 وسائط.append(self.الرموز[self.الموضع]['القيمة'])
             self.الموضع += 1
         self.استهلك('قوس_دائري_إغلاق', "توقع ')'")
-        
         return {'النوع': 'استدعاء_دالة', 'الاسم': اسم_الدالة, 'الوسائط': وسائط}
 
     def تحليل_متغير(self):
@@ -188,7 +199,8 @@ class محلل_نحوي:
         قيمة = []
         while self.الموضع < len(self.الرموز):
             رمز_حالي = self.الرموز[self.الموضع]
-            if رمز_حالي['النوع'] == 'كلمة_مفتاحية' and رمز_حالي['القيمة'] in ('ليكن', 'عند', 'أظهر', 'إذا', 'دالة'):
+            # توقف فقط عند الكلمات التي تبدأ بياناً جديداً (ليس استرجع)
+            if رمز_حالي['النوع'] == 'كلمة_مفتاحية' and رمز_حالي['القيمة'] in ('ليكن', 'عند', 'أظهر', 'إذا', 'دالة', 'احفظ', 'امسح'):
                 break
             if رمز_حالي['النوع'] == 'قوس_إغلاق':
                 break
@@ -222,12 +234,22 @@ def توليد_أمر(أمر, بادئة='            '):
         نص_جافاسكريبت = re.sub(r'\{([أ-يa-zA-Z_][أ-يa-zA-Z0-9_]*)\}', r'${\1}', أمر['النص'])
         return f'{بادئة}alert(`{نص_جافاسكريبت}`);'
     elif أمر['النوع'] == 'متغير':
-        return f'{بادئة}let {أمر["الاسم"]} = {أمر["القيمة"]};'
+        قيمة = أمر['القيمة']
+        # معالجة خاصة إذا كانت القيمة تحتوي على استرجع
+        if 'استرجع' in قيمة:
+            match = re.search(r'استرجع\s+"([^"]+)"', قيمة)
+            if match:
+                مفتاح = match.group(1)
+                return f'{بادئة}let {أمر["الاسم"]} = استرجع_قيمة("{مفتاح}");'
+        return f'{بادئة}let {أمر["الاسم"]} = {قيمة};'
+    elif أمر['النوع'] == 'حفظ':
+        return f'{بادئة}localStorage.setItem("{أمر["مفتاح"]}", document.getElementById("{أمر["مصدر"]}").value);'
+    elif أمر['النوع'] == 'مسح':
+        return f'{بادئة}localStorage.removeItem("{أمر["مفتاح"]}");'
     elif أمر['النوع'] == 'استدعاء_دالة':
-        # تحويل قيم الإدخال إلى أرقام باستخدام parseFloat
         وسائط = ', '.join(
-            f'parseFloat(document.getElementById("{وسيط}").value)' 
-            if وسيط.startswith('الرقم') else وسيط 
+            f'parseFloat(document.getElementById("{وسيط}").value)'
+            if وسيط.startswith('الرقم') else f'document.getElementById("{وسيط}").value'
             for وسيط in أمر['الوسائط']
         )
         return f'{بادئة}{أمر["الاسم"]}({وسائط});'
@@ -244,7 +266,7 @@ def توليد_الكود(شجرة):
     html.append('    <style>')
     html.append('        body { font-family: "Cairo", "Tajawal", sans-serif; background: #0B0C10; color: #C5C6C7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }')
     html.append('        .container { text-align: center; padding: 40px; }')
-    html.append('        input { padding: 12px; border-radius: 8px; border: 2px solid #D4AF37; background: #1A1C23; color: white; font-family: inherit; font-size: 1em; margin: 10px 0; width: 250px; text-align: center; }')
+    html.append('        input { padding: 12px; border-radius: 8px; border: 2px solid #D4AF37; background: #1A1C23; color: white; font-family: inherit; font-size: 1em; margin: 10px 0; width: 300px; text-align: center; }')
     html.append('        input:focus { outline: none; border-color: #FFB347; }')
     html.append('        button { padding: 12px 30px; margin: 10px; cursor: pointer; font-family: inherit; font-size: 1em; }')
     
@@ -272,13 +294,18 @@ def توليد_الكود(شجرة):
                 elif عنصر['النوع'] == 'زر':
                     html.append(f'        <button id="btn-{عنصر["النص"]}">{عنصر["النص"]}</button>')
                 elif عنصر['النوع'] == 'إدخال':
-                    html.append(f'        <input type="number" id="{عنصر["المعرف"]}" placeholder="{عنصر["النص_البديل"]}">')
+                    html.append(f'        <input type="text" id="{عنصر["المعرف"]}" placeholder="{عنصر["النص_البديل"]}">')
             html.append('    </div>')
     
     if شجرة.get('معنى'):
         html.append('    <script>')
         
-        # توليد الدوال أولاً
+        # دالة مساعدة للاسترجاع
+        html.append('        function استرجع_قيمة(مفتاح) {')
+        html.append('            return localStorage.getItem(مفتاح) || "لا توجد بيانات محفوظة";')
+        html.append('        }')
+        
+        # توليد الدوال المخصصة
         for بيان in شجرة['معنى'].get('البيانات', []):
             if بيان and بيان['النوع'] == 'دالة':
                 معلمات = ', '.join(بيان['المعلمات'])
@@ -304,7 +331,7 @@ def توليد_الكود(شجرة):
 
 def رئيسي():
     محلل_الأوامر = argparse.ArgumentParser(description="مترجم لغة رَمْز", formatter_class=argparse.RawTextHelpFormatter)
-    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 1.9.0 (دعم الدوال المخصصة)')
+    محلل_الأوامر.add_argument('--version', action='version', version='رَمْز الإصدار 2.0.0 (دعم التخزين المحلي)')
     الأوامر_الفرعية = محلل_الأوامر.add_subparsers(dest='الأمر')
     أمر_البناء = الأوامر_الفرعية.add_parser('build')
     أمر_البناء.add_argument('ملف_الإدخال', nargs='?', default='examples/test.ramz')
@@ -313,7 +340,7 @@ def رئيسي():
 
     if الوسائط.الأمر == 'build':
         if not os.path.exists(الوسائط.ملف_الإدخال):
-            print(f"❌ خطأ: الملف غير موجود")
+            print(f" خطأ: الملف غير موجود")
             sys.exit(1)
         with open(الوسائط.ملف_الإدخال, "r", encoding="utf-8") as ملف:
             كود_مصدري = ملف.read()
@@ -325,7 +352,7 @@ def رئيسي():
                 ملف_المخرج.write(توليد_الكود(الشجرة))
             print("🎉 تم بناء المشروع بنجاح! افتح output/index.html في المتصفح.")
         except Exception as خطأ:
-            print(f" خطأ: {خطأ}")
+            print(f"❌ خطأ: {خطأ}")
 
 if __name__ == "__main__":
     رئيسي()
